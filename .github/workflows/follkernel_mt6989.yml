@@ -23,6 +23,11 @@ on:
         required: true
         type: boolean
         default: 'true'
+      baseband_guard:
+        description: '内核级基带保护 (防格机/防恶意脚本破坏基带分区, 默认开)'
+        required: true
+        type: boolean
+        default: 'true'
       kernel_suffix:
         description: '内核后缀 (留空=FollKernel)'
         required: false
@@ -142,6 +147,17 @@ jobs:
           CONFIG_HEADERS_INSTALL=n
           X
           sed -i 's/check_defconfig//' common/build.config.gki
+
+      - name: 内核级基带保护
+        if: inputs.baseband_guard
+        run: |
+          cd kernel_workspace
+          echo ">>> 启用内核级基带保护 (Baseband Guard)..."
+          echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
+          cd common
+          curl -sSL https://github.com/cctv18/Baseband-guard/raw/master/setup.sh | bash
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
+          cd ..
 
       - name: 内核后缀
         run: |
