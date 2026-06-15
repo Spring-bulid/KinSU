@@ -1,0 +1,7 @@
+# KernelSU-based kernel driver for Rekernel
+# Author: spring bulid
+
+obj-$(CONFIG_KSU) += rekernel.o
+
+rekernel-objs := ksu.o
+ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-declaration-after-statement

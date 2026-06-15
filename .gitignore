@@ -1,0 +1,50 @@
+# Credentials & Secrets
+_cred.txt
+*.pem
+*.key
+*.keystore
+*.jks
+
+# Build outputs
+_ko_output/
+*.ko
+*.log
+*.zip
+*.tar.gz
+
+# Kernel build workspace (cloned during build)
+kernel_workspace/
+
+# Toolchain & auxiliary libs  
+_kali_libs/
+
+# Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+**/.gradle/
+
+# IDE
+.idea/
+*.iml
+.idea_modules/
+*.swp
+*.swo
+*~
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

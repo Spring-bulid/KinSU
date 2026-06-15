@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 盾牌轮廓 -->
+    <path
+        android:pathData="M12,2 L4,5 L4,11 C4,16 7.5,20 12,22 C16.5,20 20,16 20,11 L20,5 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:fillColor="#00000000" />
+    <!-- 右上四分之一填充 -->
+    <path
+        android:pathData="M12,4 L12,12 L18,12 L18,6.5 Z"
+        android:fillColor="#FFFFFFFF" />
+    <!-- 左下四分之一填充 -->
+    <path
+        android:pathData="M6,12 L12,12 L12,20.2 C9.8,19 7.5,16.5 6.5,13 Z"
+        android:fillColor="#FFFFFFFF" />
+</vector>
