@@ -66,11 +66,11 @@ jobs:
           fi
       - name: Build
         env:
-          ES2: ${{ needs.gen-key.outputs.expected_size }}
-          EH2: ${{ needs.gen-key.outputs.expected_hash }}
+          ES: ${{ needs.gen-key.outputs.expected_size }}
+          EH: ${{ needs.gen-key.outputs.expected_hash }}
         run: |
           cd KernelSU/kernel
-          KSU_EXPECTED_SIZE2="$ES2" KSU_EXPECTED_HASH2="$EH2" CONFIG_KSU=m CC=clang make -j$(nproc)
+          KSU_EXPECTED_SIZE="$ES" KSU_EXPECTED_HASH="$EH" CONFIG_KSU=m CC=clang make -j$(nproc)
           llvm-strip -d follkernel.ko
           mkdir -p ../out
           cp follkernel.ko "../out/${{ matrix.kmi }}_follkernel.ko"
