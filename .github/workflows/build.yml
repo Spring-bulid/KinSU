@@ -176,7 +176,6 @@ jobs:
           KP: ${{ needs.gen-key.outputs.keystore_password }}
           AP: ${{ needs.gen-key.outputs.key_password }}
         run: |
-          cd KernelSU/manager
           echo "$KS" | base64 -d > follkernel.jks
           echo "KEYSTORE_PASSWORD=$KP" >> gradle.properties
           echo "KEY_ALIAS=follkernel" >> gradle.properties
