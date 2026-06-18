@@ -13,17 +13,182 @@ on:
   workflow_call:
 
 jobs:
-  build-manager:
+  generate-key:
+    runs-on: ubuntu-latest
+    outputs:
+      expected_size: ${{ steps.extract.outputs.expected_size }}
+      expected_hash: ${{ steps.extract.outputs.expected_hash }}
+      keystore: ${{ steps.gen.outputs.keystore }}
+      keystore_password: ${{ steps.gen.outputs.keystore_password }}
+      key_password: ${{ steps.gen.outputs.key_password }}
+    steps:
+      - name: Generate keystore
+        id: gen
+        run: |
+          KEYSTORE_PASSWORD=$(openssl rand -hex 32)
+          KEY_PASSWORD=$(openssl rand -hex 32)
+          echo "keystore_password=$KEYSTORE_PASSWORD" >> $GITHUB_OUTPUT
+          echo "key_password=$KEY_PASSWORD" >> $GITHUB_OUTPUT
+
+          keytool -genkeypair \
+            -alias follkernel-key \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -dname "CN=FollKernel" \
+            -storetype JKS \
+            -keystore follkernel.jks
+
+          echo "keystore=$(base64 -w 0 follkernel.jks)" >> $GITHUB_OUTPUT
+
+      - name: Extract certificate hash and size
+        id: extract
+        env:
+          STORE_PASS: ${{ steps.gen.outputs.keystore_password }}
+        run: |
+          keytool -exportcert \
+            -alias follkernel-key \
+            -keystore follkernel.jks \
+            -storepass "$STORE_PASS" \
+            -file follkernel-cert.der
+
+          SIZE_DEC=$(stat -c%s follkernel-cert.der)
+          SIZE_HEX=$(printf '0x%04x' "$SIZE_DEC")
+          echo "expected_size=$SIZE_HEX" >> $GITHUB_OUTPUT
+
+          HASH=$(sha256sum follkernel-cert.der | awk '{print $1}')
+          echo "expected_hash=$HASH" >> $GITHUB_OUTPUT
+
+          echo "Certificate size: $SIZE_HEX ($SIZE_DEC bytes)"
+          echo "Certificate hash: $HASH"
+
+  build-lkm:
+    needs: generate-key
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        kmi:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build kernelsu.ko
+        env:
+          EXPECTED_SIZE2: ${{ needs.generate-key.outputs.expected_size }}
+          EXPECTED_HASH2: ${{ needs.generate-key.outputs.expected_hash }}
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}/KernelSU:/src" \
+            ghcr.io/ylarod/ddk-min:${{ matrix.kmi }}-20260313 \
+            bash -c "
+              cd /src/kernel
+              EXTRA_ARGS=''
+              if [ -n '$EXPECTED_SIZE2' ] && [ -n '$EXPECTED_HASH2' ]; then
+                EXTRA_ARGS='KSU_EXPECTED_SIZE2=$EXPECTED_SIZE2 KSU_EXPECTED_HASH2=$EXPECTED_HASH2'
+              fi
+              CONFIG_KSU=m CC=clang make \$EXTRA_ARGS
+              llvm-strip -d kernelsu.ko
+              mkdir -p /src/out
+              cp kernelsu.ko /src/out/${{ matrix.kmi }}_kernelsu.ko
+            "
+
+      - name: Upload LKM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.kmi }}-lkm
+          path: KernelSU/out/${{ matrix.kmi }}_kernelsu.ko
+
+  build-ksud:
+    needs: [generate-key, build-lkm]
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./KernelSU
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-linux-android
+          - target: x86_64-linux-android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
+      - name: Download all LKM artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: lkm-artifacts
+          pattern: '*-lkm'
+
+      - name: Place LKM files into ksud bin dirs
+        run: |
+          for dir in userspace/ksud/bin/aarch64 userspace/ksud/bin/x86_64; do
+            mkdir -p "$dir"
+            for ko in lkm-artifacts/*-lkm/*_kernelsu.ko; do
+              if [ -f "$ko" ]; then
+                kmi=$(basename "$ko" _kernelsu.ko)
+                cp "$ko" "$dir/${kmi}_follkernel.ko"
+                echo "Placed ${kmi}_follkernel.ko in $dir"
+              fi
+            done
+          done
+
+      - name: Setup Rust
+        run: |
+          rustup update stable
+          rustup target add ${{ matrix.target }}
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+
+      - name: Build ksud
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          source .github/scripts/setup-rust-build.sh ${{ matrix.target }} 26
+          cargo build --target ${{ matrix.target }} --release --manifest-path ./userspace/ksud/Cargo.toml
+
+      - name: Upload ksud artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ksud-${{ matrix.target }}
+          path: KernelSU/target/${{ matrix.target }}/release/ksud
+
+  build-manager:
+    needs: [generate-key]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./KernelSU/manager
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Write keystore config
+        env:
+          PR_KEYSTORE: ${{ needs.generate-key.outputs.keystore }}
+          PR_KEYSTORE_PASSWORD: ${{ needs.generate-key.outputs.keystore_password }}
+          PR_KEY_PASSWORD: ${{ needs.generate-key.outputs.key_password }}
+        run: |
+          echo "$PR_KEYSTORE" | base64 -d > follkernel.jks
+          {
+            echo "KEYSTORE_PASSWORD=$PR_KEYSTORE_PASSWORD"
+            echo "KEY_ALIAS=follkernel-key"
+            echo "KEY_PASSWORD=$PR_KEY_PASSWORD"
+            echo "KEYSTORE_FILE=follkernel.jks"
+          } >> gradle.properties
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -37,64 +202,88 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager "build-tools;35.0.0" "platforms;android-35" "platform-tools"
+      - name: Build with Gradle
+        run: ./gradlew clean assembleRelease
 
-      - name: Setup Rust
-        run: |
-          rustup update stable
-          rustup target add aarch64-linux-android
-          rustup target add x86_64-linux-android
-
-      - name: Setup NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
+      - name: Upload manager artifact
+        uses: actions/upload-artifact@v7
         with:
-          ndk-version: r29
+          name: manager-gradle
+          path: KernelSU/manager/app/build/outputs/apk/release/*.apk
 
-      - name: Build ksud arm64
+  repack-manager:
+    needs: [generate-key, build-manager, build-ksud]
+    if: always() && needs.build-manager.result == 'success' && needs.build-ksud.result == 'success'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./KernelSU
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download manager APK
+        uses: actions/download-artifact@v8
+        with:
+          name: manager-gradle
+          path: artifacts/manager-gradle
+
+      - name: Download arm64 ksud
+        uses: actions/download-artifact@v8
+        with:
+          name: ksud-aarch64-linux-android
+          path: artifacts/ksud-aarch64-linux-android
+
+      - name: Download x86_64 ksud
+        uses: actions/download-artifact@v8
+        with:
+          name: ksud-x86_64-linux-android
+          path: artifacts/ksud-x86_64-linux-android
+
+      - name: Place artifacts
+        run: |
+          mkdir -p manager/app/build/outputs/apk/release
+          APK=$(find artifacts/manager-gradle -type f -name "*.apk" | head -n 1)
+          test -n "$APK"
+          cp -f "$APK" manager/app/build/outputs/apk/release/
+
+          mkdir -p target/aarch64-linux-android/release
+          mkdir -p target/x86_64-linux-android/release
+          ARM64_KSUD=$(find artifacts/ksud-aarch64-linux-android -type f -name ksud | head -n 1)
+          X86_64_KSUD=$(find artifacts/ksud-x86_64-linux-android -type f -name ksud | head -n 1)
+          test -n "$ARM64_KSUD"
+          test -n "$X86_64_KSUD"
+          cp -f "$ARM64_KSUD" target/aarch64-linux-android/release/ksud
+          cp -f "$X86_64_KSUD" target/x86_64-linux-android/release/ksud
+
+      - name: Prepare signing key
         env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          PR_KEYSTORE: ${{ needs.generate-key.outputs.keystore }}
+          PR_KEYSTORE_PASSWORD: ${{ needs.generate-key.outputs.keystore_password }}
+          PR_KEY_PASSWORD: ${{ needs.generate-key.outputs.key_password }}
         run: |
-          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
-          cargo build --target aarch64-linux-android --release --manifest-path ./userspace/ksud/Cargo.toml
+          echo "$PR_KEYSTORE" | base64 -d > follkernel.jks
+          echo "SIGN_KEYSTORE_FILE=follkernel.jks" >> $GITHUB_ENV
+          echo "SIGN_KEY_ALIAS=follkernel-key" >> $GITHUB_ENV
+          echo "SIGN_KEYSTORE_PASSWORD=$PR_KEYSTORE_PASSWORD" >> $GITHUB_ENV
+          echo "SIGN_KEY_PASSWORD=$PR_KEY_PASSWORD" >> $GITHUB_ENV
 
-      - name: Build ksud x86_64
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: |
-          source .github/scripts/setup-rust-build.sh x86_64-linux-android 26
-          cargo build --target x86_64-linux-android --release --manifest-path ./userspace/ksud/Cargo.toml
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
 
-      - name: Build Manager APK
-        run: |
-          cd manager
-          ./gradlew clean assembleRelease
-
-      - name: Create debug keystore
-        run: |
-          keytool -genkey -v \
-            -keystore debug.keystore \
-            -alias androiddebugkey \
-            -storepass android \
-            -keypass android \
-            -keyalg RSA \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-
-      - name: Repack APK with new ksud
+      - name: Repack and resign
         run: |
           python3 repack_apk.py repack \
             -b release \
             -t release \
             -a arm64-v8a \
             -a x86_64 \
-            --strip \
-            -K debug.keystore \
-            -A androiddebugkey \
-            -P android \
-            -S android
+            -K "$SIGN_KEYSTORE_FILE" \
+            -A "$SIGN_KEY_ALIAS" \
+            -P "$SIGN_KEYSTORE_PASSWORD" \
+            -S "$SIGN_KEY_PASSWORD" \
+            --strip
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
