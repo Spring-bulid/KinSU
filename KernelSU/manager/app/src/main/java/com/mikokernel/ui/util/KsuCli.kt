@@ -463,6 +463,22 @@ suspend fun getSupportedKmis(): List<String> = withContext(Dispatchers.IO) {
     out.filter { it.isNotBlank() }.map { it.trim() }
 }
 
+fun getSupportedKmisFromAssets(): List<String> {
+    return try {
+        ksuApp.assets.list("lkm")?.mapNotNull { name ->
+            when {
+                name.endsWith("_rekernel.ko", ignoreCase = true) ->
+                    name.removeSuffix("_rekernel.ko")
+                name.endsWith("_follkernel.ko", ignoreCase = true) ->
+                    name.removeSuffix("_follkernel.ko")
+                else -> null
+            }
+        } ?: emptyList()
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
 suspend fun isAbDevice(): Boolean = withContext(Dispatchers.IO) {
     val shell = getRootShell()
     val cmd = "boot-info is-ab-device"

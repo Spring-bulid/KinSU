@@ -19,6 +19,7 @@ import com.mikokernel.ui.component.material.SegmentedColumn
 import com.mikokernel.ui.component.material.SegmentedRadioItem
 import com.mikokernel.ui.util.getCurrentKmi
 import com.mikokernel.ui.util.getSupportedKmis
+import com.mikokernel.ui.util.getSupportedKmisFromAssets
 
 @Composable
 fun ChooseKmiDialogMaterial(
@@ -28,15 +29,27 @@ fun ChooseKmiDialogMaterial(
 ) {
     if (!show) return
 
-    val supportedKMIs by produceState(initialValue = emptyList()) {
-        value = getSupportedKmis()
-    }
-
     val currentKmi by produceState(initialValue = "") {
         value = getCurrentKmi()
     }
 
-    val selectedKmi = remember(currentKmi) { mutableStateOf(currentKmi) }
+    val supportedKMIs by produceState(initialValue = emptyList()) {
+        val fromKsud = getSupportedKmis()
+        val fromAssets = getSupportedKmisFromAssets()
+        value = (fromKsud + fromAssets).filter { it.isNotBlank() }.distinct()
+    }
+
+    val displayKMIs = remember(supportedKMIs, currentKmi) {
+        if (currentKmi.isNotBlank() && currentKmi !in supportedKMIs) {
+            listOf(currentKmi) + supportedKMIs
+        } else {
+            supportedKMIs
+        }
+    }
+
+    val selectedKmi = remember(displayKMIs, currentKmi) {
+        mutableStateOf(currentKmi.takeIf { it in displayKMIs } ?: displayKMIs.firstOrNull() ?: "")
+    }
 
     AlertDialog(
         onDismissRequest = {
@@ -49,7 +62,7 @@ fun ChooseKmiDialogMaterial(
                     onSelected(selectedKmi.value)
                     onDismissRequest()
                 },
-                enabled = supportedKMIs.contains(selectedKmi.value)
+                enabled = selectedKmi.value.isNotBlank() && displayKMIs.contains(selectedKmi.value)
             ) {
                 Text(stringResource(id = R.string.confirm))
             }
@@ -73,7 +86,7 @@ fun ChooseKmiDialogMaterial(
         },
         text = {
             SegmentedColumn(
-                content = supportedKMIs.map { kmi ->
+                content = displayKMIs.map { kmi ->
                     {
                         SegmentedRadioItem(
                             title = kmi,
