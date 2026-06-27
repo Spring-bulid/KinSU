@@ -21,11 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Pets
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -152,7 +151,7 @@ internal fun TopBar(
         title = { Text(stringResource(R.string.app_name)) },
         actions = {
             IconButton(onClick = onInstallClick) {
-                Icon(Icons.Outlined.SystemUpdate, stringResource(R.string.install))
+                Icon(Icons.Outlined.Build, stringResource(R.string.install))
             }
             if (showSusfs) {
                 IconButton(onClick = { navigator?.push(Route.SuFSConfig) }) {
