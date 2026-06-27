@@ -752,7 +752,7 @@ pub fn patch(args: BootPatchArgs) -> Result<()> {
                 "Cannot work with Magisk patched image"
             );
 
-            println!("- Adding KernelSU LKM");
+            println!("- Adding KinSU LKM");
             let is_kernelsu_patched = cpio.exists("kinsu.ko");
 
             if !is_kernelsu_patched && cpio.exists("init") {
@@ -984,7 +984,7 @@ pub fn restore(args: BootRestoreArgs) -> Result<()> {
 
     ensure!(
         cpio.exists("kinsu.ko"),
-        "boot image is not patched by KernelSU"
+        "boot image is not patched by KinSU"
     );
 
     #[cfg(target_os = "android")]
@@ -1070,7 +1070,7 @@ fn rebuild_without_ksu(
     cpio: &mut Cpio,
     vendor_ramdisk_idx: Option<usize>,
 ) -> Result<Vec<u8>> {
-    println!("- Removing KernelSU from boot image");
+    println!("- Removing KinSU from boot image");
     cpio.rm("kinsu.ko", false);
     if cpio.exists("init.real") {
         cpio.mv("init.real", "init")?;
