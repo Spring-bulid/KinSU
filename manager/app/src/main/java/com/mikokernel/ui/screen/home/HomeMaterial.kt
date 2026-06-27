@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Pets
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Warning
@@ -70,7 +71,7 @@ fun HomePagerMaterial(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
-        topBar = { TopBar(scrollBehavior = scrollBehavior, onInstallClick = actions.onInstallClick, isKpmActive = state.isKpmActive) },
+        topBar = { TopBar(scrollBehavior = scrollBehavior, onInstallClick = actions.onInstallClick, showSusfs = state.showSusfsButton) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         Column(
@@ -144,7 +145,7 @@ internal fun UpdateCard(
 internal fun TopBar(
     scrollBehavior: TopAppBarScrollBehavior? = null,
     onInstallClick: () -> Unit = {},
-    isKpmActive: Boolean = false,
+    showSusfs: Boolean = false,
 ) {
     val navigator = LocalNavigator.current
     LargeFlexibleTopAppBar(
@@ -153,14 +154,14 @@ internal fun TopBar(
             IconButton(onClick = onInstallClick) {
                 Icon(Icons.Outlined.SystemUpdate, stringResource(R.string.install))
             }
+            if (showSusfs) {
+                IconButton(onClick = { navigator?.push(Route.SuFSConfig) }) {
+                    Icon(Icons.Outlined.Pets, "SuSFS")
+                }
+            }
             RebootListPopup()
             IconButton(onClick = { navigator?.push(Route.Settings) }) {
                 Icon(Icons.Outlined.Settings, stringResource(R.string.settings))
-            }
-            if (isKpmActive) {
-                IconButton(onClick = { navigator?.push(Route.Kpm) }) {
-                    Icon(Icons.Outlined.BugReport, "GKI Debug")
-                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -346,7 +347,7 @@ internal fun LearnMoreCard(onOpenUrl: (String) -> Unit) {
 
 @Composable
 internal fun DonateCard(onOpenUrl: (String) -> Unit) {
-    TonalCard(onClick = { onOpenUrl("https://patreon.com/weishu") }) {
+    TonalCard(onClick = { onOpenUrl("https://github.com/Spring-bulid/KinSU-Modules") }) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
